@@ -124,9 +124,15 @@ docker run -p 3000:3000 -e OPENAI_API_KEY=your_key_here jebbie-chat
 
 ### Environment Variables
 
+- **CRITICAL**: The application requires an OpenAI API key to function
+- Set the `OPENAI_API_KEY` environment variable in your deployment platform
+- For Vercel deployments:
+  1. Go to your project settings
+  2. Navigate to the "Environment Variables" tab
+  3. Add `OPENAI_API_KEY` with your OpenAI API key
+  4. Redeploy your application
+- For local testing, create a `.env.local` file based on the `.env.example` template
 - Never commit your API keys to the repository
-- Use environment variables in your deployment platform
-- For local testing, use a `.env.local` file (already in .gitignore)
 
 ### OpenAI API Usage
 
@@ -136,9 +142,28 @@ docker run -p 3000:3000 -e OPENAI_API_KEY=your_key_here jebbie-chat
 
 ### Troubleshooting
 
-- **Build Errors**: If you encounter build errors, check the Vercel build logs
-- **API Errors**: Check that your OpenAI API key is correctly set up
-- **Runtime Errors**: Use browser developer tools to check for JavaScript errors
+#### Missing OpenAI API Key Error
+
+If you see this error during deployment:
+```
+Error: The OPENAI_API_KEY environment variable is missing or empty
+```
+
+This means you need to:
+1. Add the `OPENAI_API_KEY` environment variable in your Vercel project settings
+2. Trigger a new deployment after adding the environment variable
+
+#### Other Build Errors
+
+- Check the Vercel build logs for detailed error information
+- Ensure all required environment variables are set
+- If you continue to have issues, try deploying with the Vercel CLI for more detailed logs
+
+#### API Errors
+
+- Check that your OpenAI API key is correctly set up and has sufficient credits
+- Verify the API key has the correct permissions for the models being used
+- Test your API key with a simple curl request to confirm it's working
 
 ### Getting Help
 

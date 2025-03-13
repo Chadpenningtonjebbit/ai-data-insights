@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  organization: process.env.OPENAI_ORG_ID, // Add organization ID if available
-});
+// Initialize OpenAI client with better error handling for build time
+const apiKey = process.env.OPENAI_API_KEY || '';
+const orgId = process.env.OPENAI_ORG_ID || undefined;
+
+// Only create the client if we have an API key or we're in a build environment
+const openai = apiKey 
+  ? new OpenAI({
+      apiKey,
+      organization: orgId,
+    })
+  : null;
 
 // Log API key status (not the actual key) for debugging
 console.log("OpenAI API Key status:", {
@@ -142,6 +148,19 @@ export async function POST(request: Request) {
         });
       }
       
+      // Check if OpenAI client is available
+      if (!openai) {
+        console.error("OpenAI client not initialized - API key missing");
+        return NextResponse.json({
+          message: {
+            role: "assistant",
+            content: "I'm unable to analyze your data because the OpenAI API key is not configured. Please contact the administrator to set up the API key.",
+            timestamp: new Date().toISOString(),
+            type: "text"
+          }
+        });
+      }
+      
       // Generate insights from the cleaned CSV data using OpenAI
       const insights = await generateInsightsFromOpenAI(cleanedCsvData, message);
       return NextResponse.json({
@@ -194,6 +213,14 @@ async function generateInsightsFromOpenAI(
   if (headers.length === 0 || headers[0] === '' || rows.length === 0) {
     console.log("Using sample data for testing since CSV data is empty or invalid");
     return generateSampleResponse(query);
+  }
+  
+  // Check if OpenAI client is available
+  if (!openai) {
+    console.error("OpenAI client not initialized - API key missing");
+    return {
+      message: "I'm unable to analyze your data because the OpenAI API key is not configured. Please contact the administrator to set up the API key."
+    };
   }
   
   // Prepare data for OpenAI
