@@ -1,7 +1,6 @@
 import { JebbieChat } from "@/components/jebbie/chat-drawer";
 import { CSVUploader } from "@/components/csv-uploader";
 import { DebugCSV } from "@/components/debug-csv";
-import Image from "next/image";
 
 export default function Home() {
   return (

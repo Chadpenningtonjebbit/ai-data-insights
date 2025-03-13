@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -278,7 +278,7 @@ This is how tables will be displayed when data is analyzed.`;
     );
     
     // Check for completed text messages that need follow-up suggestions
-    const completedTextMessage = messages.find(m => 
+    const _completedTextMessage = messages.find(m => 
       m.role === "assistant" && 
       m.type === "text" && 
       !m.isTyping && 
@@ -286,7 +286,7 @@ This is how tables will be displayed when data is analyzed.`;
     );
     
     // Helper function to check if a message contains actual data insights
-    const containsDataInsights = (content: string): boolean => {
+    const _containsDataInsights = (content: string): boolean => {
       const contentLower = content.toLowerCase();
       
       // Check for data-related keywords and patterns
@@ -351,7 +351,7 @@ This is how tables will be displayed when data is analyzed.`;
     
     // Remove follow-up suggestions for text messages entirely
     // The code for handling text message follow-ups has been removed
-  }, [messages]);
+  }, [messages, sampleTableData, sampleTableHeaders]);
 
   const handleSendMessage = async () => {
     if (!input.trim()) return;
@@ -438,7 +438,7 @@ This is how tables will be displayed when data is analyzed.`;
   };
 
   // Generate follow-up suggestions based on the content
-  const generateFollowUpSuggestions = (content: string, tableData?: Record<string, string>[]): string[] => {
+  const _generateFollowUpSuggestions = (content: string): string[] => {
     // Content-specific follow-ups based on the actual response
     const contentSpecificSuggestions: string[] = [];
     const contentLower = content.toLowerCase();
@@ -711,15 +711,15 @@ This is how tables will be displayed when data is analyzed.`;
     setPanelWidth(newWidth);
   };
 
-  // Handle resize end
-  const handleResizeEnd = () => {
+  // Handle resize end - using useCallback to memoize the function
+  const handleResizeEnd = useCallback(() => {
     resizingRef.current = false;
     setIsResizing(false); // Update UI state
     document.removeEventListener('mousemove', handleResizeMove);
     document.removeEventListener('mouseup', handleResizeEnd);
     // Remove the resizing class
     document.body.classList.remove('resizing');
-  };
+  }, []);
 
   // Log when panel width changes
   useEffect(() => {
@@ -733,7 +733,7 @@ This is how tables will be displayed when data is analyzed.`;
       document.removeEventListener('mouseup', handleResizeEnd);
       document.body.classList.remove('resizing');
     };
-  }, []);
+  }, [handleResizeEnd]);
 
   // Format message content with proper styling
   const formatMessageContent = (content: string, isTyping: boolean = false) => {
@@ -1071,7 +1071,7 @@ This is how tables will be displayed when data is analyzed.`;
                     <div className="flex-1">
                       {messages.map((message, index) => {
                         // Check if this message should be stacked (if it's from the assistant and the previous message was also from the assistant)
-                        const isStacked = 
+                        const _isStacked = 
                           message.role === "assistant" && 
                           index > 0 && 
                           messages[index - 1].role === "assistant";

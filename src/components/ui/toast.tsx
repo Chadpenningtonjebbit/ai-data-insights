@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import * as ToastPrimitives from "@radix-ui/react-toast"
 import { cn } from "@/lib/utils"
 
 export interface ToastProps {
@@ -12,6 +13,10 @@ export interface ToastProps {
   onOpenChange?: (open: boolean) => void
   variant?: "default" | "destructive"
   className?: string
+  classNames?: {
+    base?: string;
+    content?: string;
+  };
 }
 
 export type ToastActionElement = React.ReactElement
@@ -38,9 +43,6 @@ export const ToastViewport: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
 export const Toast: React.FC<ToastProps & React.HTMLAttributes<HTMLDivElement>> = ({
   className,
   variant = "default",
-  title,
-  description,
-  action,
   children,
   ...props
 }) => {

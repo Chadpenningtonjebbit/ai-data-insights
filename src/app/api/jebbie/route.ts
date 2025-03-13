@@ -16,7 +16,7 @@ console.log("OpenAI API Key status:", {
 
 export async function POST(request: Request) {
   try {
-    const { message, userId, brandId, csvData } = await request.json();
+    const { message, csvData } = await request.json();
     
     console.log("Received message:", message);
     
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
       }
       
       // Clean up CSV data - filter out empty headers and ensure we have valid data
-      let cleanedCsvData = {
+      const cleanedCsvData = {
         headers: csvData.headers.filter((h: string) => h !== ''),
         rows: csvData.rows
       };

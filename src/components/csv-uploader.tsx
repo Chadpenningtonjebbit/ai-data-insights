@@ -225,7 +225,7 @@ export function CSVUploader() {
     if (file) {
       processFile(file);
     }
-  }, []);
+  }, [processFile]);
   
   const handleButtonClick = () => {
     fileInputRef.current?.click();
