@@ -16,33 +16,58 @@ A conversational AI interface for Jebbit platform users to query their campaign 
 - **UI Components**: shadcn/ui
 - **AI**: OpenAI API (GPT-4o)
 
-## Getting Started
+## Setup Instructions
 
 ### Prerequisites
-
-- Node.js 18+ and npm
+- Node.js 18+ installed
+- An OpenAI API key
 
 ### Installation
 
-1. Clone the repository
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd datatesting
+```
+
 2. Install dependencies:
+```bash
+npm install
+```
+
+3. Set up environment variables:
+   - Copy the `.env.example` file to `.env.local`:
    ```bash
-   npm install
+   cp .env.example .env.local
    ```
-3. Create a `.env.local` file in the root directory with your OpenAI API key:
+   - Edit `.env.local` and add your OpenAI API key:
    ```
-   OPENAI_API_KEY=your_api_key_here
+   OPENAI_API_KEY=your_actual_api_key_here
    ```
 
-### Development
-
-Run the development server:
-
+4. Start the development server:
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
+The application will be available at http://localhost:3000
+
+## Important Notes
+
+- **API Key**: The OpenAI API key is required for the application to function properly. Each user needs to provide their own API key.
+- **Environment Variables**: Never commit your `.env.local` file to the repository as it contains sensitive information.
+- **API Usage**: Be aware that using the OpenAI API incurs costs based on usage.
+
+## Troubleshooting
+
+### "OpenAI API key is not configured" Error
+If you see this error, it means the application cannot find your OpenAI API key. Make sure:
+1. You've created a `.env.local` file with your API key
+2. The key is correctly formatted (starts with "sk-")
+3. The environment variable is named exactly `OPENAI_API_KEY`
+
+### Deployment
+For deployment to platforms like Vercel, you'll need to set the `OPENAI_API_KEY` environment variable in your project settings.
 
 ## Project Structure
 

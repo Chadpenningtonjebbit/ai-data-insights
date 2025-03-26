@@ -3,15 +3,14 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { useToast } from '@/components/ui/use-toast';
-import { useCSVData, CSVData } from '@/hooks/use-csv-data';
+import { useDataSource, CSVData } from '@/hooks/use-data-source';
 
 export function CSVUploader() {
-  const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { csvData, updateCSVData, clearCSVData } = useCSVData();
+  
+  const { csvData, updateCSVData, clearCSVData } = useDataSource();
 
   const parseCSV = (content: string, fileName: string): CSVData | null => {
     try {
@@ -194,10 +193,6 @@ export function CSVUploader() {
       
       if (parsedData) {
         updateCSVData(parsedData);
-        toast({
-          title: 'CSV Uploaded Successfully',
-          description: `Loaded ${parsedData.rows.length} rows with ${parsedData.headers.length} columns`,
-        });
       }
     };
     
@@ -225,7 +220,7 @@ export function CSVUploader() {
     if (file) {
       processFile(file);
     }
-  }, [processFile]);
+  }, []);
   
   const handleButtonClick = () => {
     fileInputRef.current?.click();
@@ -233,10 +228,6 @@ export function CSVUploader() {
   
   const handleClearData = () => {
     clearCSVData();
-    toast({
-      title: 'Data Cleared',
-      description: 'The CSV data has been cleared',
-    });
   };
   
   return (

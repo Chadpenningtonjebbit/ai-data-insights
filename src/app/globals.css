@@ -52,7 +52,7 @@
   --card-foreground: oklch(0.141 0.005 285.823);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
+  --primary: oklch(0.55 0.18 246.00);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
@@ -79,6 +79,17 @@
   --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
   --sidebar-border: oklch(0.92 0.004 286.32);
   --sidebar-ring: oklch(0.705 0.015 286.067);
+  --toast-border: #e2e8f0;
+  --toast-bg: #f8fafc;
+  --toast-text: #1e293b;
+  
+  --toast-success-bg: #e6f0ff;
+  --toast-success-border: #99c2ff;
+  --toast-success-text: #2563eb;
+  
+  --toast-error-bg: #fef2f2;
+  --toast-error-border: #fee2e2;
+  --toast-error-text: #dc2626;
 }
 
 .dark {
@@ -88,8 +99,8 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.141 0.005 285.823);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.21 0.006 285.885);
+  --primary: oklch(0.45 0.20 246.00);
+  --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.274 0.006 286.033);
@@ -184,4 +195,46 @@
 
 .cursor-blink {
   animation: cursorBlink 1s infinite;
+}
+
+/* Custom toast styling */
+[data-sonner-toast] {
+  border: 1px solid var(--toast-border) !important;
+  background: var(--toast-bg) !important;
+  color: var(--toast-text) !important;
+  font-family: inherit !important;
+}
+
+[data-sonner-toast][data-type="success"] {
+  background: var(--toast-success-bg) !important;
+  border-color: var(--toast-success-border) !important;
+  color: var(--toast-success-text) !important;
+}
+
+[data-sonner-toast][data-type="error"] {
+  background: var(--toast-error-bg) !important;
+  border-color: var(--toast-error-border) !important;
+  color: var(--toast-error-text) !important;
+}
+
+/* Sonner toast description text */
+[data-sonner-toast] > [data-description] {
+  opacity: 0.8 !important;
+}
+
+/* Rounded toast corners matching shadcn style */
+[data-sonner-toast] {
+  border-radius: 0.5rem !important;
+}
+
+/* Bold the main toast title */
+[data-sonner-toast] > [data-title] {
+  font-weight: 600 !important;
+}
+
+/* Custom toast position - ensure it's at the top center */
+[data-sonner-toaster][data-position="top-center"] {
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  right: auto !important;
 }

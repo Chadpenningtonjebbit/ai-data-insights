@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { Toaster } from "@/components/ui/toaster";
-import { CSVProvider } from "@/contexts/csv-context";
+import { DataSourceProvider } from "@/contexts/data-source-context";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "AI Insights Platform",
-  description: "Upload your CSV data and get AI-powered insights",
+  title: "Jebbie Platform",
+  description: "AI-powered data analysis platform",
 };
 
 export default function RootLayout({
@@ -19,10 +18,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <CSVProvider>
+        <DataSourceProvider>
           {children}
-          <Toaster />
-        </CSVProvider>
+        </DataSourceProvider>
       </body>
     </html>
   );

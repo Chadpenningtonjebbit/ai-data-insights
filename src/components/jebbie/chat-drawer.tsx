@@ -7,13 +7,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useCSVData } from '@/contexts/csv-context';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useDataSource } from "@/hooks/use-data-source";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Send, X } from "lucide-react";
 import { Message } from "@/types";
 import { useRouter } from "next/navigation";
-import { useToast } from "@/components/ui/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // Message type definition
 // type Message = {
@@ -32,8 +40,17 @@ import { useToast } from "@/components/ui/use-toast";
 //   followUpSuggestionsShown?: boolean; // Track if follow-up suggestions have been shown for a table
 // };
 
-export function JebbieChat() {
-  const [isOpen, setIsOpen] = useState(true);
+// Update the component declaration to accept props
+type JebbieChatProps = {
+  isOpen?: boolean;
+  setIsOpen?: React.Dispatch<React.SetStateAction<boolean>>;
+};
+
+export function JebbieChat({ isOpen: propIsOpen, setIsOpen: propSetIsOpen }: JebbieChatProps = {}) {
+  // Use props if provided, otherwise use internal state
+  const [internalIsOpen, setInternalIsOpen] = useState(true);
+  const isOpen = propIsOpen !== undefined ? propIsOpen : internalIsOpen;
+  const setIsOpen = propSetIsOpen || setInternalIsOpen;
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -48,10 +65,15 @@ export function JebbieChat() {
   const typingSpeedRef = useRef(30); // ms per character
   const pendingTableRef = useRef<{tableData: Record<string, string>[], tableHeaders: string[]} | null>(null);
   const [showBanner, setShowBanner] = useState(true); // State to control banner visibility
-  const { csvData } = useCSVData();
+  const { currentData, dataSourceType, selectedBrand } = useDataSource();
   const [showBackButton, setShowBackButton] = useState(false);
   const [showFormattingExamples, setShowFormattingExamples] = useState(false);
   const [pendingTable, setPendingTable] = useState(false);
+
+  // Added state for feedback
+  const [isFeedbackDialogOpen, setIsFeedbackDialogOpen] = useState(false);
+  const [detailedFeedback, setDetailedFeedback] = useState("");
+  const [currentFeedbackMessageIndex, setCurrentFeedbackMessageIndex] = useState<number | null>(null);
 
   // Sample popular prompts
   const popularPrompts = [
@@ -330,7 +352,8 @@ This is how tables will be displayed when data is analyzed.`;
         // Add follow-up message after a delay
         setTimeout(() => {
           const followUpContent = "Would you like to know more? For example:\n\n" +
-            suggestions.slice(0, 2).join("\n\n");
+            "• " + suggestions[0] + "\n\n" +
+            "• " + suggestions[1];
           
           setMessages(prev => [
             ...prev,
@@ -371,23 +394,37 @@ This is how tables will be displayed when data is analyzed.`;
     setIsLoading(true);
     
     try {
-      // Debug log to check if CSV data is available
-      console.log("Sending message with CSV data:", csvData ? {
-        headers: csvData.headers,
-        rowCount: csvData.rows.length,
-        fileName: csvData.fileName
-      } : "No CSV data available");
+      // Debug log to check if data is available
+      console.log("Sending message with data:", currentData ? {
+        source: dataSourceType,
+        brand: selectedBrand,
+        headers: currentData.headers,
+        rowCount: currentData.rows.length,
+        fileName: currentData.fileName
+      } : "No data available");
+      
+      // Get API key from localStorage if available
+      const apiKey = localStorage.getItem("openai_api_key");
+      
+      // Prepare headers with API key if available
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      
+      // Add API key to headers if available
+      if (apiKey) {
+        headers['x-api-key'] = apiKey;
+      }
       
       const response = await fetch('/api/jebbie', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           message: input,
           userId: 'user-1',
-          brandId: 'brand-1',
-          csvData: csvData // Send CSV data if available
+          brandId: selectedBrand || 'brand-1',
+          dataSource: dataSourceType,
+          csvData: currentData // Send current data regardless of source
         }),
       });
       
@@ -562,17 +599,106 @@ This is how tables will be displayed when data is analyzed.`;
   };
 
   // Handle feedback (like/dislike)
-  const handleFeedback = (messageIndex: number, feedback: "like" | "dislike") => {
+  const handleFeedback = async (messageIndex: number, feedback: "like" | "dislike") => {
+    // If they're clicking the same feedback that's already selected, toggle it off
+    if (messages[messageIndex].feedback === feedback) {
+      setMessages(prev => 
+        prev.map((message, index) => 
+          index === messageIndex 
+            ? { ...message, feedback: null } 
+            : message
+        )
+      );
+      
+      // Send feedback removal to API
+      try {
+        await fetch('/api/jebbie/feedback', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            feedback: 'removed',
+            messageContent: messages[messageIndex].content,
+            detailedFeedback: '',
+          }),
+        });
+      } catch (error) {
+        console.error('Error sending feedback removal:', error);
+      }
+      
+      return;
+    }
+    
+    // Set the feedback
     setMessages(prev => 
       prev.map((message, index) => 
         index === messageIndex 
-          ? { ...message, feedback: message.feedback === feedback ? null : feedback } 
+          ? { ...message, feedback } 
           : message
       )
     );
     
-    // Here you could also send the feedback to your backend
+    // If feedback is "dislike", open the dialog for more detailed feedback
+    if (feedback === "dislike") {
+      setCurrentFeedbackMessageIndex(messageIndex);
+      setDetailedFeedback("");
+      setIsFeedbackDialogOpen(true);
+    } else {
+      // For "like" feedback, send to API immediately
+      try {
+        await fetch('/api/jebbie/feedback', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            feedback,
+            messageContent: messages[messageIndex].content,
+            detailedFeedback: '',
+          }),
+        });
+      } catch (error) {
+        console.error('Error sending feedback:', error);
+      }
+    }
+    
+    // Log the feedback
     console.log(`Message ${messageIndex} received ${feedback} feedback`);
+  };
+
+  // Handle submitting detailed feedback
+  const handleSubmitDetailedFeedback = async () => {
+    if (currentFeedbackMessageIndex !== null) {
+      // Store the detailed feedback with the message
+      setMessages(prev => 
+        prev.map((message, index) => 
+          index === currentFeedbackMessageIndex 
+            ? { ...message, detailedFeedback } 
+            : message
+        )
+      );
+      
+      // Send the feedback to the API
+      try {
+        await fetch('/api/jebbie/feedback', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            feedback: 'dislike',
+            messageContent: messages[currentFeedbackMessageIndex].content,
+            detailedFeedback,
+          }),
+        });
+      } catch (error) {
+        console.error('Error sending detailed feedback:', error);
+      }
+      
+      // Close the dialog
+      setIsFeedbackDialogOpen(false);
+    }
   };
 
   // Convert table data to CSV
@@ -621,46 +747,122 @@ This is how tables will be displayed when data is analyzed.`;
       ? message.visibleTableRows 
       : message.tableData.length; // Show all if not animating
     
+    // Generate SQL CREATE TABLE statement
+    const generateSQLCreateTable = () => {
+      const tableName = "sample_table";
+      
+      // Determine column types based on data
+      const columnTypes = message.tableHeaders!.map(header => {
+        const sampleValue = message.tableData![0]?.[header] || '';
+        // Simple type inference
+        if (!isNaN(Number(sampleValue))) return 'NUMERIC';
+        if (sampleValue.match(/^\d{4}-\d{2}-\d{2}/) || sampleValue.match(/^\d{2}\/\d{2}\/\d{4}/)) return 'DATE';
+        return 'VARCHAR(255)';
+      });
+      
+      // Create the SQL statement
+      const createTableSQL = `CREATE TABLE ${tableName} (\n` + 
+        message.tableHeaders!.map((header, index) => {
+          return `  ${header.replace(/\s+/g, '_')} ${columnTypes[index]}`;
+        }).join(',\n') + 
+        '\n);';
+        
+      return createTableSQL;
+    };
+    
+    // Generate SQL INSERT statements
+    const generateSQLInserts = () => {
+      const tableName = "sample_table";
+      // Remove the row limit to show all rows
+      const allRows = message.tableData!.slice(0, visibleRows);
+      
+      return allRows.map((row, index) => {
+        const columns = message.tableHeaders!.map(h => h.replace(/\s+/g, '_')).join(', ');
+        const values = message.tableHeaders!.map(header => {
+          const value = row[header] || '';
+          // Quote strings, leave numbers as is
+          return isNaN(Number(value)) ? `'${value.replace(/'/g, "''")}'` : value;
+        }).join(', ');
+        
+        return `INSERT INTO ${tableName} (${columns})\nVALUES (${values});`;
+      }).join('\n\n');
+    };
+    
     return (
-      <div className="w-full mt-3 border border-gray-300 dark:border-gray-600 rounded-md overflow-hidden">
-        <div className="w-full overflow-x-auto">
-          <Table className="w-full border-collapse border-spacing-0">
-            <TableHeader>
-              <TableRow className="bg-gray-200 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700">
-                {message.tableHeaders.map((header, index) => (
-                  <TableHead key={index} className="whitespace-nowrap font-medium text-gray-700 dark:text-gray-200 py-2 px-3 text-left border-b border-r border-gray-300 dark:border-gray-600 last:border-r-0">
-                    {header}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {message.tableData.slice(0, visibleRows).map((row, rowIndex) => (
-                <TableRow 
-                  key={rowIndex} 
-                  className="border-b border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 animate-fadeIn"
-                >
-                  {message.tableHeaders?.map((header, cellIndex) => (
-                    <TableCell key={cellIndex} className="whitespace-nowrap text-gray-700 dark:text-gray-300 py-2 px-3 border-r last:border-r-0 border-gray-300 dark:border-gray-600">
-                      {String(row[header] || '')}
-                    </TableCell>
+      <div className="w-full border border-gray-300 dark:border-gray-600 rounded-md overflow-hidden">
+        <Tabs defaultValue="table" className="w-full flex flex-col gap-0">
+          <div className="bg-gray-100 dark:bg-gray-800 px-3 py-2 border-b border-gray-300 dark:border-gray-600">
+            <TabsList className="grid w-60 grid-cols-2">
+              <TabsTrigger value="table">Table View</TabsTrigger>
+              <TabsTrigger value="sql">SQL View</TabsTrigger>
+            </TabsList>
+          </div>
+          
+          <TabsContent value="table" className="w-full">
+            <div className="w-full overflow-x-auto">
+              <Table className="w-full border-collapse border-spacing-0">
+                <TableHeader>
+                  <TableRow className="bg-gray-200 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700">
+                    {message.tableHeaders.map((header, index) => (
+                      <TableHead key={index} className="whitespace-nowrap font-medium text-gray-700 dark:text-gray-200 py-2 px-3 text-left border-b border-r border-gray-300 dark:border-gray-600 last:border-r-0">
+                        {header}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {message.tableData.slice(0, visibleRows).map((row, rowIndex) => (
+                    <TableRow 
+                      key={rowIndex} 
+                      className="border-b border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 animate-fadeIn"
+                    >
+                      {message.tableHeaders?.map((header, cellIndex) => (
+                        <TableCell key={cellIndex} className="whitespace-nowrap text-gray-700 dark:text-gray-300 py-2 px-3 border-r last:border-r-0 border-gray-300 dark:border-gray-600">
+                          {String(row[header] || '')}
+                        </TableCell>
+                      ))}
+                    </TableRow>
                   ))}
-                </TableRow>
-              ))}
-              {/* Show loading indicator if there are more rows to display */}
-              {visibleRows < message.tableData.length && (
-                <TableRow>
-                  <TableCell 
-                    colSpan={message.tableHeaders.length} 
-                    className="text-center py-2 text-gray-500 dark:text-gray-400 border-b border-gray-300 dark:border-gray-600"
-                  >
-                    <span className="inline-block w-1.5 h-4 ml-0.5 bg-current animate-pulse rounded-sm" />
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                  {/* Show loading indicator if there are more rows to display */}
+                  {visibleRows < message.tableData.length && (
+                    <TableRow>
+                      <TableCell 
+                        colSpan={message.tableHeaders.length} 
+                        className="text-center py-2 text-gray-500 dark:text-gray-400 border-b border-gray-300 dark:border-gray-600"
+                      >
+                        <span className="inline-block w-1.5 h-4 ml-0.5 bg-current animate-pulse rounded-sm" />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="sql" className="p-4 bg-gray-50 dark:bg-gray-900">
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">CREATE TABLE Statement</h4>
+                <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-md overflow-x-auto text-sm text-gray-800 dark:text-gray-200 font-mono">
+                  {generateSQLCreateTable()}
+                </pre>
+              </div>
+              
+              <div>
+                <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                  INSERT Statements ({visibleRows} rows)
+                </h4>
+                <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-md overflow-x-auto text-sm text-gray-800 dark:text-gray-200 font-mono">
+                  {generateSQLInserts()}
+                </pre>
+              </div>
+              
+              <div className="text-xs text-gray-500 dark:text-gray-400 italic">
+                Note: This is a simplified SQL representation for testing purposes.
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     );
   };
@@ -736,7 +938,7 @@ This is how tables will be displayed when data is analyzed.`;
   }, [handleResizeEnd]);
 
   // Format message content with proper styling
-  const formatMessageContent = (content: string, isTyping: boolean = false) => {
+  const formatMessageContent = (content: string, isTyping: boolean = false): React.ReactNode => {
     if (!content) return null;
     
     // Remove special handling for follow-up messages in Gemini style
@@ -758,7 +960,7 @@ This is how tables will be displayed when data is analyzed.`;
       return formattedText;
     };
     
-    // Process the content line by line
+    // Split the content into lines
     const lines = content.split('\n');
     
     return (
@@ -768,7 +970,7 @@ This is how tables will be displayed when data is analyzed.`;
           if (line.startsWith('# ')) {
             const headerContent = formatText(line.substring(2));
             return (
-              <h2 key={index} className="text-xl font-bold mb-2 mt-1 leading-relaxed">
+              <h2 key={index} className="text-xl font-semibold mb-3 mt-2 leading-relaxed">
                 <span dangerouslySetInnerHTML={{ __html: headerContent }}></span>
                 {isTyping && index === lines.length - 1 && (
                   <span className="inline-block w-1.5 h-4 ml-0.5 bg-current animate-pulse rounded-sm cursor-blink" />
@@ -794,9 +996,9 @@ This is how tables will be displayed when data is analyzed.`;
           if (line.trim().startsWith('•') || line.trim().startsWith('*') || line.trim().startsWith('-')) {
             const bulletContent = formatText(line.trim().substring(1).trim());
             return (
-              <div key={index} className="flex items-start mb-1 leading-relaxed">
-                <span className="mr-2">•</span>
-                <span dangerouslySetInnerHTML={{ __html: bulletContent }}></span>
+              <div key={index} className="flex items-start mb-2 leading-relaxed">
+                <span className="mr-2 flex-shrink-0">•</span>
+                <span dangerouslySetInnerHTML={{ __html: bulletContent }} className="flex-1"></span>
                 {isTyping && index === lines.length - 1 && (
                   <span className="inline-block w-1.5 h-4 ml-0.5 bg-current animate-pulse rounded-sm cursor-blink" />
                 )}
@@ -871,29 +1073,12 @@ This is how tables will be displayed when data is analyzed.`;
     };
   }, [isOpen]);
 
+  const openChat = () => {
+    setIsOpen(true);
+  };
+
   return (
     <>
-      <Button 
-        onClick={() => setIsOpen(true)}
-        className="fixed right-4 top-4 z-50 bg-blue-600 hover:bg-blue-700 text-white focus-visible:ring-1 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="mr-2"
-        >
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-        Jebbie
-      </Button>
-
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
         <SheetContent 
           side="right" 
@@ -994,8 +1179,8 @@ This is how tables will be displayed when data is analyzed.`;
                 <div className="flex flex-col items-center justify-center h-full text-center p-4">
                   <div className="mb-8 flex flex-col items-center">
                     <div className="mb-2">
-                      <h2 className="text-blue-600 text-3xl font-semibold mb-2">Hello, Chad</h2>
-                      <p className="text-gray-600 dark:text-gray-300 text-xl">How can I help you today?</p>
+                      <h2 className="text-blue-600 text-3xl font-semibold mb-2">Hello, (user)</h2>
+                      <p className="text-gray-600 dark:text-gray-300 text-base">How can I help you today?</p>
                     </div>
                   </div>
                   
@@ -1375,6 +1560,46 @@ This is how tables will be displayed when data is analyzed.`;
           </div>
         </SheetContent>
       </Sheet>
+      
+      {/* Feedback Dialog */}
+      <Dialog open={isFeedbackDialogOpen} onOpenChange={setIsFeedbackDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Help us improve</DialogTitle>
+            <DialogDescription>
+              Please tell us why this response wasn't helpful. Your feedback helps us improve our AI.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="What could be improved about this response?"
+            value={detailedFeedback}
+            onChange={(e) => setDetailedFeedback(e.target.value)}
+            className="min-h-[100px]"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsFeedbackDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitDetailedFeedback}>
+              Submit Feedback
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
+}
+
+// Export the JebbieChat component with its openChat method for use in the TopNav
+export function useJebbieChat() {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const openChat = useCallback(() => {
+    setIsOpen(true);
+  }, []);
+  
+  return {
+    openChat,
+    JebbieChat: () => <JebbieChat isOpen={isOpen} setIsOpen={setIsOpen} />
+  };
 } 

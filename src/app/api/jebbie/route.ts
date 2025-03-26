@@ -2,16 +2,9 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
 // Initialize OpenAI client with better error handling for build time
+// We'll create the client dynamically in the POST handler to use the key from headers if available
 const apiKey = process.env.OPENAI_API_KEY || '';
 const orgId = process.env.OPENAI_ORG_ID || undefined;
-
-// Only create the client if we have an API key or we're in a build environment
-const openai = apiKey 
-  ? new OpenAI({
-      apiKey,
-      organization: orgId,
-    })
-  : null;
 
 // Log API key status (not the actual key) for debugging
 console.log("OpenAI API Key status:", {
@@ -22,9 +15,27 @@ console.log("OpenAI API Key status:", {
 
 export async function POST(request: Request) {
   try {
-    const { message, csvData } = await request.json();
+    // Get API key from request headers (sent from client-side localStorage)
+    const clientApiKey = request.headers.get('x-api-key');
+    
+    // Use client API key if provided, otherwise fall back to environment variable
+    const effectiveApiKey = clientApiKey || apiKey;
+    
+    // Create OpenAI client with the effective API key
+    const openai = effectiveApiKey 
+      ? new OpenAI({
+          apiKey: effectiveApiKey,
+          organization: orgId,
+        })
+      : null;
+    
+    // Log which API key source we're using (without revealing the key)
+    console.log("Using API key from:", clientApiKey ? "client localStorage" : "environment variable");
+    
+    const { message, csvData, dataSource, brandId } = await request.json();
     
     console.log("Received message:", message);
+    console.log("Data source:", dataSource, brandId);
     
     // Special debug mode - if message contains "debug nba" or "use nba", return NBA sample data
     if (message.toLowerCase().includes("debug nba") || 
@@ -87,7 +98,10 @@ export async function POST(request: Request) {
       // Clean up CSV data - filter out empty headers and ensure we have valid data
       const cleanedCsvData = {
         headers: csvData.headers.filter((h: string) => h !== ''),
-        rows: csvData.rows
+        rows: csvData.rows,
+        source: dataSource || 'csv',
+        brand: brandId,
+        fileName: csvData?.fileName || 'data'
       };
       
       // If all headers were empty, try to extract headers from the first row of data
@@ -154,7 +168,7 @@ export async function POST(request: Request) {
         return NextResponse.json({
           message: {
             role: "assistant",
-            content: "I'm unable to analyze your data because the OpenAI API key is not configured. Please contact the administrator to set up the API key.",
+            content: "I'm unable to analyze your data because the OpenAI API key is not configured. Please add your API key in the input field at the top of the page.",
             timestamp: new Date().toISOString(),
             type: "text"
           }
@@ -162,7 +176,7 @@ export async function POST(request: Request) {
       }
       
       // Generate insights from the cleaned CSV data using OpenAI
-      const insights = await generateInsightsFromOpenAI(cleanedCsvData, message);
+      const insights = await generateInsightsFromOpenAI(cleanedCsvData, message, openai);
       return NextResponse.json({
         message: {
           role: "assistant",
@@ -202,12 +216,19 @@ export async function POST(request: Request) {
 
 // Function to generate insights from uploaded CSV data using OpenAI
 async function generateInsightsFromOpenAI(
-  csvData: { headers: string[], rows: Record<string, string>[] }, 
-  query: string
+  csvData: { 
+    headers: string[], 
+    rows: Record<string, string>[],
+    source?: string,
+    brand?: string,
+    fileName?: string 
+  }, 
+  query: string,
+  openai: OpenAI | null
 ): Promise<{ message: string, headers?: string[], data?: Record<string, string>[] }> {
   console.log("Generating insights from OpenAI with query:", query);
   
-  const { headers, rows } = csvData;
+  const { headers, rows, source = 'csv', brand } = csvData;
   
   // If the CSV data is empty or invalid, use sample data for testing
   if (headers.length === 0 || headers[0] === '' || rows.length === 0) {
@@ -219,7 +240,7 @@ async function generateInsightsFromOpenAI(
   if (!openai) {
     console.error("OpenAI client not initialized - API key missing");
     return {
-      message: "I'm unable to analyze your data because the OpenAI API key is not configured. Please contact the administrator to set up the API key."
+      message: "I'm unable to analyze your data because the OpenAI API key is not configured. Please add your API key in the input field at the top of the page."
     };
   }
   
@@ -235,8 +256,12 @@ async function generateInsightsFromOpenAI(
   
   // Prepare a system message that instructs the model on how to analyze the data
   const systemMessage = `
-You are a data analysis assistant named Jebbie with a friendly, helpful personality. You will be provided with CSV data and a user query about that data.
+You are a data analysis assistant named Jebbie with a friendly, helpful personality. You will be provided with data and a user query about that data.
 Analyze the data and provide a concise, accurate response to the query.
+
+The data source is: ${source === 'platform' ? 'Platform-wide data across multiple brands' : 
+                       source === 'brand' ? `Brand-specific data for ${brand}` : 
+                       'User uploaded CSV file'}.
 
 When responding:
 1. Be contextually appropriate - if the user is asking a question, respond directly with the answer. Only use phrases like "Sure thing!" or "I'd be happy to help with that!" when the user is making a request rather than asking a question.
@@ -252,9 +277,10 @@ For text responses, use proper formatting to improve readability:
 - Use **bold** for emphasis on important points
 - Structure your analysis with clear sections
 
-The CSV data has the following structure:
+The data has the following structure:
 - Headers: ${headers.join(', ')}
 - Total rows: ${rows.length}
+- Source: ${source}${source === 'brand' ? ` (${brand})` : ''}
 
 IMPORTANT: Choose ONLY ONE response format based on what best answers the user's query:
 

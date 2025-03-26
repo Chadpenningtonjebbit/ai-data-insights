@@ -13,4 +13,5 @@ export type Message = {
   followUpSuggestions?: string[]; // Add follow-up suggestions
   followUpSuggestionsShown?: boolean; // Track if follow-up suggestions have been shown for a table
   isFollowUp?: boolean; // Flag to identify follow-up messages
+  detailedFeedback?: string; // Store detailed feedback when a user gives a thumbs down
 }; 
